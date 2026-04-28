@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cuaca Indonesia Plus</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f1f5f9;
+            --card: #ffffff;
+            --primary: #0ea5e9;
+            --text-dark: #0f172a;
+            --text-light: #64748b;
+            --grad: linear-gradient(135deg, #0ea5e9, #2563eb);
+        }
+
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-dark);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .app-container { width: 100%; max-width: 480px; }
+
+        .search-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 20px;
+        }
+
+        input {
+            flex: 1;
+            padding: 14px 18px;
+            border: 2px solid #e2e8f0;
+            border-radius: 14px;
+            font-size: 1rem;
+            outline: none;
+            transition: 0.2s;
+        }
+
+        input:focus { border-color: var(--primary); }
+
+        button {
+            padding: 0 20px;
+            background: var(--primary);
+            color: white;
+            border: none;
+            border-radius: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .weather-hero {
+            background: var(--grad);
+            color: white;
+            padding: 35px 25px;
+            border-radius: 30px;
+            text-align: center;
+            box-shadow: 0 20px 30px -10px rgba(37, 99, 235, 0.3);
+            margin-bottom: 30px;
+        }
+
+        #displayCity { margin: 0; font-size: 1.6rem; font-weight: 800; }
+        #displayRegion { margin: 5px 0 0; font-size: 0.9rem; opacity: 0.8; font-weight: 400; }
+        
+        .main-temp { font-size: 5rem; font-weight: 800; margin: 15px 0; letter-spacing: -2px; }
+        .condition { font-size: 1rem; font-weight: 600; background: rgba(255,255,255,0.2); padding: 6px 16px; border-radius: 50px; display: inline-block; }
+
+        .extra-info {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 30px;
+            background: rgba(255,255,255,0.1);
+            padding: 15px;
+            border-radius: 20px;
+        }
+
+        .info-item span { display: block; font-size: 0.75rem; opacity: 0.8; margin-bottom: 4px; }
+        .info-item strong { font-size: 1rem; }
+
+        .section-label { font-weight: 800; margin-bottom: 15px; display: block; font-size: 0.9rem; color: var(--text-light); text-transform: uppercase; letter-spacing: 1px; }
+        
+        .hourly-scroll {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            padding-bottom: 15px;
+            scrollbar-width: none;
+        }
+        .hourly-scroll::-webkit-scrollbar { display: none; }
+
+        .hour-card {
+            min-width: 90px;
+            background: var(--card);
+            padding: 18px 10px;
+            border-radius: 22px;
+            text-align: center;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+        }
+
+        .hour-card .time { font-size: 0.75rem; color: var(--text-light); font-weight: 600; }
+        .hour-card .h-temp { font-weight: 800; margin-top: 8px; font-size: 1.1rem; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="search-group">
+        <input type="text" id="cityInput" placeholder="Cari kota atau daerah...">
+        <button onclick="search()">Cari</button>
+    </div>
+
+    <div class="weather-hero">
+        <h2 id="displayCity">Memuat...</h2>
+        <p id="displayRegion">--</p>
+        <div class="main-temp" id="displayTemp">--°</div>
+        <div class="condition" id="displayDesc">--</div>
+        
+        <div class="extra-info">
+            <div class="info-item">
+                <span>Angin</span>
+                <strong id="wind">-- km/h</strong>
+            </div>
+            <div class="info-item">
+                <span>Kelembapan</span>
+                <strong id="hum">--%</strong>
+            </div>
+        </div>
+    </div>
+
+    <span class="section-label">Prediksi 24 Jam ke Depan</span>
+    <div class="hourly-scroll" id="hourlyWrapper"></div>
+</div>
+
+<script>
+    const codes = {
+        0: "Cerah", 1: "Cerah Berawan", 2: "Berawan", 3: "Mendung",
+        45: "Kabut", 51: "Gerimis", 61: "Hujan", 80: "Hujan Ringan", 95: "Badai Petir"
+    };
+
+    async function search() {
+        const input = document.getElementById('cityInput').value;
+        if(!input) return;
+
+        try {
+            // Geocoding untuk cari koordinat + nama daerah
+            const geo = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${input}&count=1&language=id`);
+            const geoData = await geo.json();
+            
+            if(!geoData.results) return alert("Lokasi tidak ditemukan!");
+            
+            const res = geoData.results[0];
+            
+            // Update Nama Kota & Daerah (Provinsi)
+            document.getElementById('displayCity').innerText = res.name;
+            document.getElementById('displayRegion').innerText = res.admin1 ? res.admin1 : "Indonesia";
+            
+            fetchWeather(res.latitude, res.longitude);
+        } catch (e) { console.error(e); }
+    }
+
+    async function fetchWeather(lat, lon) {
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current_weather=true&hourly=temperature_2m,weathercode,relativehumidity_2m&timezone=auto`;
+        
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            
+            const cur = data.current_weather;
+            document.getElementById('displayTemp').innerText = Math.round(cur.temperature) + "°";
+            document.getElementById('displayDesc').innerText = codes[cur.weathercode] || "Cerah";
+            document.getElementById('wind').innerText = cur.windspeed + " km/h";
+            document.getElementById('hum').innerText = data.hourly.relativehumidity_2m[0] + "%";
+
+            const wrapper = document.getElementById('hourlyWrapper');
+            wrapper.innerHTML = "";
+            
+            // Mencari index jam sekarang agar sinkron
+            const nowHour = new Date().getHours();
+            
+            for(let i = nowHour; i < nowHour + 24; i++) {
+                const timeStr = data.hourly.time[i];
+                if(!timeStr) break;
+
+                const hour = new Date(timeStr).getHours().toString().padStart(2, '0') + ":00";
+                const temp = Math.round(data.hourly.temperature_2m[i]);
+                const code = data.hourly.weathercode[i];
+                let icon = code > 50 ? "🌧️" : (code > 0 ? "⛅" : "☀️");
+
+                wrapper.innerHTML += `
+                    <div class="hour-card">
+                        <div class="time">${hour}</div>
+                        <div style="font-size: 1.6rem; margin: 10px 0;">${icon}</div>
+                        <div class="h-temp">${temp}°</div>
+                    </div>
+                `;
+            }
+        } catch (e) { console.error("Gagal ambil data cuaca:", e); }
+    }
+
+    window.onload = () => {
+        document.getElementById('cityInput').value = "Jakarta";
+        search();
+    }
+</script>
+
+</body>
+</html>
